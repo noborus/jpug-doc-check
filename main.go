@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/beevik/etree"
 	"github.com/gdamore/tcell"
@@ -21,40 +22,42 @@ func elementToString(elem *etree.Element) (ret string) {
 	return ret
 }
 
-func xmlParse(root *etree.Element)([][]string) {
-	fmt.Printf("%s\n",root.Tag)
-	var ct [][]string
-	for _, para := range root.FindElements("//*/para") {
-		fmt.Printf("%s\n",para)
-		ch := para.Child
-		d := []string{"", ""}
-		for _, c := range ch {
-			switch v := c.(type) {
-			case *etree.Element:
-				d[0] += elementToString(v)
-				// TODO: v.Tag != "itemizedlist" && v.Tag != "orderedlist" && v.Tag != "variablelist"{
-			case *etree.CharData:
-				d[0] += v.Data
-			case *etree.Comment:
-				d[1] += v.Data
-			default:
-				fmt.Fprintf(os.Stderr, "Unknown:%T", v)
+func getTextComment(i int, token []etree.Token) (text string, comment string) {
+	for _, c := range token {
+		switch v := c.(type) {
+		case *etree.Element:
+			if v.Tag != "itemizedlist" && v.Tag != "orderedlist" && v.Tag != "variablelist" {
+				text += elementToString(v)
 			}
+		case *etree.CharData:
+			text += v.Data
+		case *etree.Comment:
+			comment += v.Data
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown:%T", v)
 		}
-		ct = append(ct, d)
 	}
-	return ct
+	return strings.TrimLeft(text, " \n"), strings.TrimLeft(comment, "\n")
 }
 
-func main() {
+func xmlParse(root *etree.Element) [][]string {
+	var tcList [][]string
+	for i, child := range root.ChildElements() {
+		if child.Tag == "para" {
+			token := child.Child
+			text, comment := getTextComment(i, token)
+			tcList = append(tcList, []string{text, comment})
+		} else {
+			tcList = append(tcList, xmlParse(child)...)
+		}
+	}
+	return tcList
+}
+
+func draw(tcList [][]string) {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
-	doc := etree.NewDocument()
-	if err := doc.ReadFromFile(os.Args[1]); err != nil {
-		panic(err)
-	}
-	ct := xmlParse(doc.Root())
-	for page, h := range ct {
+	for page, h := range tcList {
 		comment := tview.NewTextView().
 			SetTextColor(tcell.ColorGreen).
 			SetRegions(true).
@@ -82,4 +85,13 @@ func main() {
 	if err := app.SetRoot(pages, true).Run(); err != nil {
 		panic(err)
 	}
+}
+func main() {
+	doc := etree.NewDocument()
+	if err := doc.ReadFromFile(os.Args[1]); err != nil {
+		panic(err)
+	}
+	// _ = xmlParse(doc.Root())
+	tcList := xmlParse(doc.Root())
+	draw(tcList)
 }
