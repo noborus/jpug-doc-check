@@ -10,6 +10,13 @@ import (
 	"github.com/rivo/tview"
 )
 
+// tcList type
+const (
+	TEXT = iota
+	COMMENT
+	PATH
+)
+
 func elementToString(elem *etree.Element) (ret string) {
 	doc := etree.NewDocument()
 	c := elem.Copy()
@@ -26,7 +33,7 @@ func getTextComment(i int, token []etree.Token) (text string, comment string) {
 	for _, c := range token {
 		switch v := c.(type) {
 		case *etree.Element:
-			if v.Tag != "itemizedlist" && v.Tag != "orderedlist" && v.Tag != "variablelist" {
+			if v.Tag != "itemizedlist" && v.Tag != "orderedlist" && v.Tag != "variablelist" && v.Tag != "blockquote" {
 				text += elementToString(v)
 			}
 		case *etree.CharData:
@@ -67,39 +74,50 @@ func draw(tcList [][]string) {
 	grid.AddItem(pages, 1, 0, 1, 1, 0, 0, true)
 	for page, tc := range tcList {
 
-		comment := tview.NewTextView().
-			SetTextColor(tcell.ColorGray).
-			SetRegions(true).
-			SetWordWrap(true)
-		comment.SetBorder(false)
-		fmt.Fprintf(comment, tc[1])
-
 		text := tview.NewTextView().
 			SetTextColor(tcell.ColorWhite).
 			SetRegions(false).
 			SetWordWrap(false)
 		text.SetBorder(false)
-		fmt.Fprintf(text, tc[0])
+		fmt.Fprintf(text, tc[TEXT])
+
+		comment := tview.NewTextView().
+			SetTextColor(tcell.ColorWhiteSmoke).
+			SetRegions(true).
+			SetWordWrap(true)
+		comment.SetBorder(false)
+		fmt.Fprintf(comment, tc[COMMENT])
 
 		flex := tview.NewFlex().
-			AddItem(text, 0, 1, false).
-			AddItem(comment, 0, 1, true)
-		buf := fmt.Sprintf("page-%d", page+1)
-		title := fmt.Sprintf("%s : %s", buf, tc[2])
-		comment.SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEnter {
-				if pages.HasPage(buf) {
-					pages.SwitchToPage(buf)
-					header.SetText(title)
+			AddItem(text, 0, 1, true).
+			AddItem(comment, 0, 1, false)
+		prev := fmt.Sprintf("page-%d", page-1)
+		prevTitle := fmt.Sprintf("%s : %s", prev, tc[PATH])
+		next := fmt.Sprintf("page-%d", page+1)
+		nextTitle := fmt.Sprintf("%s : %s", next, tc[PATH])
+		text.SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEscape {
+				app.Stop()
+			}
+			if key == tcell.KeyEnter || key == tcell.KeyTab {
+				if pages.HasPage(next) {
+					pages.SwitchToPage(next)
+					header.SetText(nextTitle)
 				} else {
 					app.Stop()
+				}
+			}
+			if key == tcell.KeyBacktab {
+				if pages.HasPage(prev) {
+					pages.SwitchToPage(prev)
+					header.SetText(prevTitle)
 				}
 			}
 		})
 		pages.AddPage(fmt.Sprintf("page-%d", page), flex, true, true)
 	}
 	pages.SwitchToPage("page-0")
-	header.SetText(fmt.Sprintf("page-0 : %s", tcList[0][2]))
+	header.SetText(fmt.Sprintf("page-0 : %s", tcList[0][PATH]))
 	app.SetFocus(pages)
 
 	if err := app.SetRoot(grid, true).Run(); err != nil {
