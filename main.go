@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/alecthomas/chroma/quick"
 	"github.com/beevik/etree"
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
@@ -62,6 +64,20 @@ func xmlParse(root *etree.Element, filename string) [][]string {
 	return tcList
 }
 
+func textHylight(src string) (dest string) {
+	buffer := new(bytes.Buffer)
+	err := quick.Highlight(buffer, src, "xml", "terminal", "solarized-dark256")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+	}
+	return tview.TranslateANSI(buffer.String())
+}
+func commentHylight(src string) (dest string) {
+	buffer := new(bytes.Buffer)
+	_ = quick.Highlight(buffer, src, "xml", "terminal", "solarized-dark256")
+	return tview.TranslateANSI(buffer.String())
+}
+
 func draw(tcList [][]string) {
 	app := tview.NewApplication()
 	grid := tview.NewGrid().
@@ -77,16 +93,20 @@ func draw(tcList [][]string) {
 		text := tview.NewTextView().
 			SetTextColor(tcell.ColorWhite).
 			SetRegions(false).
+			SetDynamicColors(true).
 			SetWordWrap(false)
 		text.SetBorder(false)
-		fmt.Fprintf(text, tc[TEXT])
+		tx := textHylight(tc[TEXT])
+		fmt.Fprintf(text, tx)
 
 		comment := tview.NewTextView().
 			SetTextColor(tcell.ColorWhiteSmoke).
 			SetRegions(true).
+			SetDynamicColors(true).
 			SetWordWrap(true)
 		comment.SetBorder(false)
-		fmt.Fprintf(comment, tc[COMMENT])
+		cm := commentHylight(tc[COMMENT])
+		fmt.Fprintf(comment, cm)
 
 		flex := tview.NewFlex().
 			AddItem(text, 0, 1, true).
